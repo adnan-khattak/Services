@@ -1,4 +1,4 @@
-import React, { useState, useContext } from 'react';
+import React, { useState, useContext, useEffect } from 'react';
 import {
   View,
   Text,
@@ -8,7 +8,6 @@ import {
   ScrollView,
   ActivityIndicator,
   Alert,
-  Image,
   SafeAreaView,
   Platform,
   KeyboardAvoidingView,
@@ -16,10 +15,13 @@ import {
 import { heightPercentageToDP as hp, widthPercentageToDP as wp } from 'react-native-responsive-screen';
 import { useNavigation } from '@react-navigation/native';
 import { SessionContext } from '../../App';
-import { supabase, uploadMedia } from '../utils/supabaseClient';
+import { supabase } from '../utils/supabaseClient';
+import { uploadMultipleFiles } from '../utils/cloudinaryClient';
 import Ionicons from 'react-native-vector-icons/Ionicons';
 import { Picker } from '@react-native-picker/picker';
-import { launchImageLibrary } from 'react-native-image-picker';
+import { Asset } from 'react-native-image-picker';
+import MediaPicker from '../components/MediaPicker';
+import { showInterstitialAd } from '../utils/adUtils';
 
 // Service categories
 const SERVICE_CATEGORIES = [
@@ -38,11 +40,12 @@ const AddServiceScreen = () => {
   const [price, setPrice] = useState('');
   const [category, setCategory] = useState(SERVICE_CATEGORIES[0]);
   const [location, setLocation] = useState('');
-  const [mediaFiles, setMediaFiles] = useState<any[]>([]);
+  const [mediaFiles, setMediaFiles] = useState<Asset[]>([]);
   const [isLoading, setIsLoading] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState(0);
 
   // Check if user is logged in
-  React.useEffect(() => {
+  useEffect(() => {
     if (!session?.user) {
       Alert.alert(
         'Not Logged In',
@@ -51,45 +54,6 @@ const AddServiceScreen = () => {
       );
     }
   }, [session, navigation]);
-
-  const pickImage = async () => {
-    try {
-      const result = await launchImageLibrary({
-        mediaType: 'photo',
-        maxWidth: 1000,
-        maxHeight: 1000,
-        selectionLimit: 3,
-      });
-      
-      if (result.didCancel) {
-        return;
-      }
-      
-      if (result.errorCode) {
-        Alert.alert('Error', result.errorMessage || 'Unknown error occurred');
-        return;
-      }
-      
-      if (result.assets) {
-        // Limit to 3 media files total
-        if (mediaFiles.length + result.assets.length > 3) {
-          Alert.alert('Limit Exceeded', 'You can only upload up to 3 images');
-          return;
-        }
-        
-        setMediaFiles([...mediaFiles, ...result.assets]);
-      }
-    } catch (err) {
-      console.error('Error picking images:', err);
-      Alert.alert('Error', 'Failed to pick images');
-    }
-  };
-
-  const removeImage = (index: number) => {
-    const updatedMedia = [...mediaFiles];
-    updatedMedia.splice(index, 1);
-    setMediaFiles(updatedMedia);
-  };
 
   const handleSubmit = async () => {
     if (!session?.user) {
@@ -103,41 +67,29 @@ const AddServiceScreen = () => {
     }
     
     setIsLoading(true);
+    setUploadProgress(0);
     
     try {
-      // Upload media files
+      // Upload media files to Cloudinary
       const mediaUrls = [];
       
       if (mediaFiles.length > 0) {
-        for (const media of mediaFiles) {
-          try {
-            // Convert URI to blob
-            const response = await fetch(media.uri);
-            const blob = await response.blob();
-            
-            // Create a file name from URI
-            const fileExt = media.uri.split('.').pop();
-            const fileName = `${Date.now()}.${fileExt}`;
-            
-            // Upload media
-            const { data, error } = await supabase.storage
-              .from('service_media')
-              .upload(`${Date.now()}_${fileName}`, blob);
-              
-            if (error) throw error;
-            
-            // Get public URL
-            const { data: urlData } = supabase.storage
-              .from('service_media')
-              .getPublicUrl(data?.path || '');
-              
-            mediaUrls.push(urlData.publicUrl);
-          } catch (error) {
-            console.error('Error uploading media:', error);
-            throw new Error('Failed to upload media');
-          }
+        try {
+          // Upload media files to Cloudinary
+          const urls = await uploadMultipleFiles(
+            mediaFiles,
+            'services', // Folder name in Cloudinary
+            (progress) => setUploadProgress(progress * 0.7) // 70% of the progress is for upload
+          );
+          
+          mediaUrls.push(...urls);
+        } catch (error) {
+          console.error('Error uploading media to Cloudinary:', error);
+          throw new Error('Failed to upload media');
         }
       }
+      
+      setUploadProgress(80); // 80% - Uploads complete, creating service
       
       // Create service
       const { data, error } = await supabase
@@ -157,7 +109,16 @@ const AddServiceScreen = () => {
         
       if (error) throw error;
       
+      setUploadProgress(100);
       console.log('Service created successfully:', data);
+      
+      // Show interstitial ad after successful service creation
+      try {
+        await showInterstitialAd();
+      } catch (adError) {
+        console.log('Ad display error:', adError);
+        // Continue even if ad fails to display
+      }
       
       Alert.alert(
         'Success',
@@ -169,6 +130,7 @@ const AddServiceScreen = () => {
       Alert.alert('Error', error.message || 'Failed to add service');
     } finally {
       setIsLoading(false);
+      setUploadProgress(0);
     }
   };
 
@@ -198,7 +160,6 @@ const AddServiceScreen = () => {
               placeholderTextColor="#8798AD"
               multiline
               numberOfLines={5}
-              textAlignVertical="top"
             />
             
             <Text style={styles.label}>Price</Text>
@@ -206,7 +167,7 @@ const AddServiceScreen = () => {
               style={styles.input}
               value={price}
               onChangeText={setPrice}
-              placeholder="E.g., $50/hr or $150 flat fee"
+              placeholder="E.g., $50/hr or $200 flat rate"
               placeholderTextColor="#8798AD"
               keyboardType="default"
             />
@@ -218,8 +179,8 @@ const AddServiceScreen = () => {
                 onValueChange={(itemValue) => setCategory(itemValue)}
                 style={styles.picker}
               >
-                {SERVICE_CATEGORIES.map((cat, index) => (
-                  <Picker.Item key={index} label={cat} value={cat} />
+                {SERVICE_CATEGORIES.map((cat) => (
+                  <Picker.Item key={cat} label={cat} value={cat} />
                 ))}
               </Picker>
             </View>
@@ -229,44 +190,32 @@ const AddServiceScreen = () => {
               style={styles.input}
               value={location}
               onChangeText={setLocation}
-              placeholder="E.g., Chicago, IL"
+              placeholder="E.g., New York, NY"
               placeholderTextColor="#8798AD"
             />
             
-            <Text style={styles.label}>Photos</Text>
+            {/* Media Picker Component */}
+            <MediaPicker 
+              mediaFiles={mediaFiles}
+              setMediaFiles={setMediaFiles}
+              mediaType="SERVICE"
+            />
             
-            {mediaFiles.length > 0 && (
-              <ScrollView horizontal style={styles.mediaPreviewContainer}>
-                {mediaFiles.map((media, index) => (
-                  <View key={index} style={styles.mediaPreviewItem}>
-                    <Image source={{ uri: media.uri }} style={styles.mediaPreview} />
-                    <TouchableOpacity
-                      style={styles.removeMediaButton}
-                      onPress={() => removeImage(index)}
-                    >
-                      <Ionicons name="close-circle" size={24} color="#FF4D4F" />
-                    </TouchableOpacity>
-                  </View>
-                ))}
-              </ScrollView>
-            )}
-            
-            <TouchableOpacity style={styles.mediaButton} onPress={pickImage}>
-              <Ionicons name="camera-outline" size={24} color="#4E8AF4" />
-              <Text style={styles.mediaButtonText}>Add Photos</Text>
-            </TouchableOpacity>
-            
-            <TouchableOpacity
-              style={[styles.submitButton, isLoading && styles.disabledButton]}
-              onPress={handleSubmit}
-              disabled={isLoading}
-            >
-              {isLoading ? (
-                <ActivityIndicator color="#FFFFFF" />
-              ) : (
+            {isLoading ? (
+              <View style={styles.loadingContainer}>
+                <ActivityIndicator size="small" color="#2B7CE5" />
+                <Text style={styles.loadingText}>
+                  {uploadProgress > 0 ? `Processing (${uploadProgress}%)` : 'Processing...'}
+                </Text>
+              </View>
+            ) : (
+              <TouchableOpacity 
+                style={styles.submitButton}
+                onPress={handleSubmit}
+              >
                 <Text style={styles.submitButtonText}>Add Service</Text>
-              )}
-            </TouchableOpacity>
+              </TouchableOpacity>
+            )}
           </View>
         </ScrollView>
       </KeyboardAvoidingView>
@@ -277,98 +226,66 @@ const AddServiceScreen = () => {
 const styles = StyleSheet.create({
   safeArea: {
     flex: 1,
-    backgroundColor: '#F5F7FA',
+    backgroundColor: '#FFFFFF',
   },
   container: {
     flex: 1,
-    backgroundColor: '#F5F7FA',
-    padding: wp('4%'),
+    backgroundColor: '#FFFFFF',
   },
   formContainer: {
-    padding: wp('5%'),
+    padding: wp(5),
   },
   label: {
-    fontSize: hp('1.8%'),
-    fontWeight: 'bold',
-    color: '#2E384D',
-    marginBottom: hp('1%'),
-    marginTop: hp('2%'),
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#1A2D40',
+    marginBottom: hp(1),
+    marginTop: hp(2),
   },
   input: {
-    backgroundColor: '#FFFFFF',
+    backgroundColor: '#F5F8FA',
     borderRadius: 8,
-    padding: hp('1.8%'),
-    fontSize: hp('1.7%'),
-    color: '#2E384D',
-    borderWidth: 1,
-    borderColor: '#E4E8F0',
-  },
-  textArea: {
-    minHeight: hp('15%'),
-  },
-  pickerContainer: {
-    backgroundColor: '#FFFFFF',
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: '#E4E8F0',
-    marginBottom: hp('1%'),
-  },
-  picker: {
-    height: hp('6%'),
+    paddingHorizontal: wp(4),
+    paddingVertical: hp(1.5),
+    fontSize: 14,
+    color: '#1A2D40',
     width: '100%',
   },
-  mediaPreviewContainer: {
-    flexDirection: 'row',
-    marginBottom: hp('2%'),
+  textArea: {
+    height: hp(15),
+    textAlignVertical: 'top',
   },
-  mediaPreviewItem: {
-    position: 'relative',
-    marginRight: wp('2%'),
-  },
-  mediaPreview: {
-    width: wp('30%'),
-    height: wp('30%'),
+  pickerContainer: {
+    backgroundColor: '#F5F8FA',
     borderRadius: 8,
+    marginBottom: hp(1),
   },
-  removeMediaButton: {
-    position: 'absolute',
-    top: 5,
-    right: 5,
-    backgroundColor: 'rgba(255, 255, 255, 0.8)',
-    borderRadius: 12,
-  },
-  mediaButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#FFFFFF',
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: '#E4E8F0',
-    borderStyle: 'dashed',
-    padding: hp('2%'),
-    justifyContent: 'center',
-    marginBottom: hp('3%'),
-  },
-  mediaButtonText: {
-    color: '#4E8AF4',
-    marginLeft: wp('2%'),
-    fontSize: hp('1.7%'),
+  picker: {
+    width: '100%',
   },
   submitButton: {
-    backgroundColor: '#4E8AF4',
-    borderRadius: 10,
-    padding: hp('2%'),
+    backgroundColor: '#2B7CE5',
+    borderRadius: 8,
+    paddingVertical: hp(1.8),
+    marginTop: hp(3),
     alignItems: 'center',
-    marginTop: hp('3%'),
-    marginBottom: Platform.OS === 'ios' ? hp('5%') : hp('3%'),
-  },
-  disabledButton: {
-    opacity: 0.7,
+    justifyContent: 'center',
   },
   submitButtonText: {
     color: '#FFFFFF',
-    fontSize: hp('1.8%'),
-    fontWeight: 'bold',
+    fontSize: 16,
+    fontWeight: '600',
+  },
+  loadingContainer: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginTop: hp(3),
+  },
+  loadingText: {
+    marginLeft: wp(2),
+    color: '#8798AD',
+    fontSize: 14,
   },
 });
 

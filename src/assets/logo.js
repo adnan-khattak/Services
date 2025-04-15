@@ -1,13 +1,15 @@
 import React from 'react';
-import { View, Text, StyleSheet } from 'react-native';
+import { View, Image, StyleSheet } from 'react-native';
 
-// This is a placeholder component to use instead of an actual image file
-// In a production app, you would use a real image or SVG
-const Logo = ({ size = 100, color = '#4E8AF4' }) => {
+const Logo = ({ size = 100, color = '#4E8AF4', imageSource }) => {
   return (
     <View style={[styles.logoContainer, { width: size, height: size }]}>
       <View style={[styles.circle, { backgroundColor: color }]}>
-        <Text style={styles.text}>S</Text>
+        <Image
+          source={imageSource}
+          style={styles.image}
+          resizeMode="contain"
+        />
       </View>
     </View>
   );
@@ -24,12 +26,12 @@ const styles = StyleSheet.create({
     borderRadius: 999,
     justifyContent: 'center',
     alignItems: 'center',
+    overflow: 'hidden',
   },
-  text: {
-    color: 'white',
-    fontSize: 50,
-    fontWeight: 'bold',
+  image: {
+    width: '60%',
+    height: '60%',
   },
 });
 
-export default Logo; 
+export default Logo;

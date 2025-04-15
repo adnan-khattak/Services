@@ -1,10 +1,24 @@
-import React, { useState, useEffect, useContext } from 'react';
-import { View, Text, ScrollView, StyleSheet, TouchableOpacity, Image, ActivityIndicator, RefreshControl, SafeAreaView, Platform } from 'react-native';
+import React, { useState, useEffect, useContext, useCallback } from 'react';
+import { 
+  View, 
+  Text, 
+  ScrollView, 
+  StyleSheet, 
+  TouchableOpacity, 
+  Image, 
+  ActivityIndicator, 
+  RefreshControl, 
+  SafeAreaView,
+  StatusBar,
+} from 'react-native';
 import { heightPercentageToDP as hp, widthPercentageToDP as wp } from 'react-native-responsive-screen';
 import { useNavigation } from '@react-navigation/native';
 import { StackNavigationProp } from '@react-navigation/stack';
 import { supabase } from '../utils/supabaseClient';
 import { SessionContext } from '../../App';
+import SearchBar from '../components/SearchBar';
+import Ionicons from 'react-native-vector-icons/Ionicons';
+import MediaCarousel from '../components/MediaCarousel';
 
 type RootStackParamList = {
   Home: undefined;
@@ -54,6 +68,9 @@ const HomeScreen = () => {
   const { session } = useContext(SessionContext);
   const [posts, setPosts] = useState<Post[]>([]);
   const [services, setServices] = useState<Service[]>([]);
+  const [filteredPosts, setFilteredPosts] = useState<Post[]>([]);
+  const [filteredServices, setFilteredServices] = useState<Service[]>([]);
+  const [searchQuery, setSearchQuery] = useState('');
   const [loadingPosts, setLoadingPosts] = useState(true);
   const [loadingServices, setLoadingServices] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -62,6 +79,31 @@ const HomeScreen = () => {
     fetchPosts();
     fetchServices();
   }, []);
+
+  // Filter posts and services when search query changes
+  useEffect(() => {
+    if (searchQuery.trim() === '') {
+      setFilteredPosts(posts);
+      setFilteredServices(services);
+      return;
+    }
+
+    const query = searchQuery.toLowerCase();
+    
+    // Filter posts
+    const matchedPosts = posts.filter(post => 
+      post.content.toLowerCase().includes(query)
+    );
+    setFilteredPosts(matchedPosts);
+    
+    // Filter services
+    const matchedServices = services.filter(service => 
+      service.title.toLowerCase().includes(query) || 
+      service.description.toLowerCase().includes(query) ||
+      service.category.toLowerCase().includes(query)
+    );
+    setFilteredServices(matchedServices);
+  }, [searchQuery, posts, services]);
 
   const onRefresh = async () => {
     setRefreshing(true);
@@ -114,8 +156,10 @@ const HomeScreen = () => {
         });
         
         setServices(servicesWithProfiles);
+        setFilteredServices(servicesWithProfiles);
       } else {
         setServices([]);
+        setFilteredServices([]);
       }
     } catch (error) {
       console.error('Error fetching services:', error);
@@ -166,8 +210,10 @@ const HomeScreen = () => {
         });
         
         setPosts(postsWithProfiles);
+        setFilteredPosts(postsWithProfiles);
       } else {
         setPosts([]);
+        setFilteredPosts([]);
       }
     } catch (error) {
       console.error('Error fetching posts:', error);
@@ -176,16 +222,62 @@ const HomeScreen = () => {
     }
   };
 
+  const handleSearch = (text: string) => {
+    setSearchQuery(text);
+  };
+
+  const renderServiceItem = (service: Service) => (
+    <TouchableOpacity
+      key={service.id}
+      style={styles.serviceCard}
+      onPress={() => navigation.navigate('ServiceDetails', { service })}
+    >
+      {service.media && service.media.length > 0 ? (
+        <Image
+          source={{
+            uri: service.media[0]
+          }}
+          style={styles.serviceImage}
+        />
+      ) : (
+        <View style={styles.placeholderImage}>
+          <Ionicons name="image-outline" size={24} color="#B4C4E0" />
+        </View>
+      )}
+      <View style={styles.serviceInfo}>
+        <Text style={styles.serviceTitle} numberOfLines={1}>{service.title}</Text>
+        <Text style={styles.serviceCategory}>{service.category}</Text>
+        <Text style={styles.servicePrice}>{service.price}</Text>
+      </View>
+    </TouchableOpacity>
+  );
+
   return (
     <SafeAreaView style={styles.safeArea}>
+      <StatusBar barStyle="dark-content" backgroundColor="#FFFFFF" />
+      
+      <View style={styles.header}>
+        <View style={styles.titleContainer}>
+          <Text style={styles.appTitle}>Service App</Text>
+          <SearchBar 
+            onSearch={handleSearch}
+            placeholder="Search services, posts..."
+            width={wp(60)}
+            compact={true}
+            containerStyle={styles.searchBarContainer}
+          />
+        </View>
+      </View>
+      
       <ScrollView 
         style={styles.container}
+        showsVerticalScrollIndicator={false}
         refreshControl={
           <RefreshControl
             refreshing={refreshing}
             onRefresh={onRefresh}
-            colors={['#4E8AF4']}
-            tintColor="#4E8AF4"
+            colors={['#2B7CE5']}
+            tintColor="#2B7CE5"
           />
         }
       >
@@ -198,38 +290,25 @@ const HomeScreen = () => {
           </View>
           
           {loadingServices && !refreshing ? (
-            <View style={styles.loadingContainer}>
-              <ActivityIndicator size="large" color="#4E8AF4" />
-            </View>
-          ) : services.length > 0 ? (
-            <View style={styles.servicesGrid}>
-              {services.map(service => (
-                <TouchableOpacity 
-                  key={service.id} 
-                  style={styles.serviceCard}
-                  onPress={() => navigation.navigate('ServiceDetails', { service })}
-                >
-                  <Image 
-                    source={{ 
-                      uri: service.media && service.media.length > 0 
-                        ? service.media[0] 
-                        : 'https://via.placeholder.com/150'
-                    }} 
-                    style={styles.serviceImage} 
-                  />
-                  <Text style={styles.serviceTitle}>{service.title}</Text>
-                  <Text style={styles.serviceCategory}>{service.category}</Text>
-                  <Text style={styles.servicePrice}>{service.price}</Text>
-                </TouchableOpacity>
-              ))}
-            </View>
+            <ActivityIndicator size="large" color="#2B7CE5" style={styles.loader} />
+          ) : filteredServices.length > 0 ? (
+            <ScrollView 
+              horizontal 
+              showsHorizontalScrollIndicator={false}
+              style={styles.servicesList}
+              contentContainerStyle={styles.servicesContainer}
+            >
+              {filteredServices.map(service => renderServiceItem(service))}
+            </ScrollView>
           ) : (
             <View style={styles.emptyContainer}>
-              <Text style={styles.emptyText}>No services available yet.</Text>
+              <Text style={styles.emptyText}>
+                {searchQuery ? 'No matching services found' : 'No services available yet'}
+              </Text>
             </View>
           )}
         </View>
-
+        
         <View style={styles.section}>
           <View style={styles.sectionHeader}>
             <Text style={styles.sectionTitle}>Recent Discussions</Text>
@@ -239,32 +318,61 @@ const HomeScreen = () => {
           </View>
           
           {loadingPosts && !refreshing ? (
-            <View style={styles.loadingContainer}>
-              <ActivityIndicator size="large" color="#4E8AF4" />
-            </View>
-          ) : posts.length > 0 ? (
-            <View style={styles.discussionsContainer}>
-              {posts.map(post => (
-                <TouchableOpacity 
-                  key={post.id} 
+            <ActivityIndicator size="large" color="#2B7CE5" style={styles.loader} />
+          ) : filteredPosts.length > 0 ? (
+            <View>
+              {filteredPosts.map((post) => (
+                <TouchableOpacity
+                  key={post.id}
                   style={styles.postCard}
                   onPress={() => navigation.navigate('PostDetails', { postId: post.id })}
                 >
-                  <Text style={styles.postUsername}>{post.profile?.username || 'Anonymous'}</Text>
-                  <Text style={styles.postContent}>{post.content}</Text>
+                  <View style={styles.postHeader}>
+                    <Image
+                      source={{
+                        uri: post.profile?.avatar_url || `https://ui-avatars.com/api/?name=${post.profile?.username || 'User'}`
+                      }}
+                      style={styles.userAvatar}
+                    />
+                    <View>
+                      <Text style={styles.username}>
+                        {post.profile?.username || 'Anonymous User'}
+                      </Text>
+                      <Text style={styles.postTime}>
+                        {new Date(post.created_at).toLocaleDateString()}
+                      </Text>
+                    </View>
+                  </View>
+                  
+                  <Text style={styles.postContent} numberOfLines={3}>
+                    {post.content}
+                  </Text>
+                  
                   {post.media && post.media.length > 0 && (
-                    <Image source={{ uri: post.media[0] }} style={styles.postImage} />
+                    <Image
+                      source={{ uri: post.media[0] }}
+                      style={styles.postImage}
+                    />
                   )}
-                  <View style={styles.postStats}>
-                    <Text style={styles.postStat}>{post.likes} likes</Text>
-                    <Text style={styles.postStat}>{post.comments} comments</Text>
+                  
+                  <View style={styles.postFooter}>
+                    <View style={styles.postStat}>
+                      <Ionicons name="heart-outline" size={16} color="#8798AD" />
+                      <Text style={styles.statText}>{post.likes}</Text>
+                    </View>
+                    <View style={styles.postStat}>
+                      <Ionicons name="chatbubble-outline" size={16} color="#8798AD" />
+                      <Text style={styles.statText}>{post.comments}</Text>
+                    </View>
                   </View>
                 </TouchableOpacity>
               ))}
             </View>
           ) : (
             <View style={styles.emptyContainer}>
-              <Text style={styles.emptyText}>No posts yet. Be the first to start a discussion!</Text>
+              <Text style={styles.emptyText}>
+                {searchQuery ? 'No matching discussions found' : 'No discussions available yet'}
+              </Text>
             </View>
           )}
         </View>
@@ -276,126 +384,173 @@ const HomeScreen = () => {
 const styles = StyleSheet.create({
   safeArea: {
     flex: 1,
-    backgroundColor: '#F5F7FA',
-    paddingTop: Platform.OS === 'android' ? 0 : hp('1%'),
+    backgroundColor: '#FFFFFF',
+  },
+  header: {
+    backgroundColor: '#FFFFFF',
+    paddingHorizontal: wp(4),
+    paddingVertical: hp(1),
+    borderBottomWidth: 1,
+    borderBottomColor: '#F0F2F5',
+  },
+  titleContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  appTitle: {
+    fontSize: 20,
+    fontWeight: '700',
+    color: '#000',
+  },
+  searchBarContainer: {
+    flex: 1,
+    alignItems: 'flex-end',
   },
   container: {
     flex: 1,
-    backgroundColor: '#F5F7FA',
+    backgroundColor: '#FFFFFF',
   },
   section: {
-    marginBottom: hp('3%'),
-    padding: wp('4%'),
+    marginBottom: hp(3),
   },
   sectionHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: hp('1.5%'),
+    paddingHorizontal: wp(4),
+    marginBottom: hp(1),
+    marginTop: hp(2),
   },
   sectionTitle: {
-    fontSize: hp('2.5%'),
-    fontWeight: 'bold',
-    color: '#2E384D',
+    fontSize: 18,
+    fontWeight: '600',
+    color: '#1A2D40',
   },
   seeMoreText: {
-    fontSize: hp('1.8%'),
-    color: '#4E8AF4',
+    fontSize: 14,
+    color: '#2B7CE5',
+    fontWeight: '500',
   },
-  servicesGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    justifyContent: 'space-between',
+  servicesList: {
+    paddingLeft: wp(4),
+  },
+  servicesContainer: {
+    paddingRight: wp(4),
+    paddingVertical: hp(1),
   },
   serviceCard: {
+    width: wp(40),
+    marginRight: wp(3),
+    borderRadius: 12,
     backgroundColor: '#FFFFFF',
-    borderRadius: 10,
-    padding: wp('3%'),
-    marginBottom: hp('1.5%'),
-    width: wp('43%'),
+    overflow: 'hidden',
+    elevation: 2,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.1,
-    shadowRadius: 3,
-    elevation: 3,
+    shadowRadius: 4,
   },
   serviceImage: {
     width: '100%',
-    height: hp('15%'),
-    borderRadius: 8,
-    marginBottom: hp('1%'),
+    height: hp(15),
+    backgroundColor: '#F5F8FA',
+  },
+  placeholderImage: {
+    width: '100%',
+    height: hp(15),
+    backgroundColor: '#F5F8FA',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  serviceInfo: {
+    padding: 12,
   },
   serviceTitle: {
-    fontSize: hp('2%'),
-    fontWeight: 'bold',
-    color: '#2E384D',
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#1A2D40',
+    marginBottom: 5,
   },
   serviceCategory: {
-    fontSize: hp('1.5%'),
+    fontSize: 12,
     color: '#8798AD',
-    marginBottom: hp('0.5%'),
+    marginBottom: 5,
   },
   servicePrice: {
-    fontSize: hp('1.8%'),
+    fontSize: 14,
     fontWeight: '600',
-    color: '#4E8AF4',
-  },
-  discussionsContainer: {
-    marginTop: hp('1%'),
+    color: '#2B7CE5',
   },
   postCard: {
+    marginHorizontal: wp(4),
+    marginBottom: hp(2),
     backgroundColor: '#FFFFFF',
-    borderRadius: 10,
-    padding: wp('4%'),
-    marginBottom: hp('1.5%'),
+    borderRadius: 12,
+    padding: 15,
+    elevation: 2,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.1,
-    shadowRadius: 3,
-    elevation: 3,
+    shadowRadius: 4,
   },
-  postUsername: {
-    fontSize: hp('1.8%'),
-    fontWeight: 'bold',
-    color: '#2E384D',
-    marginBottom: hp('0.5%'),
+  postHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 10,
+  },
+  userAvatar: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    marginRight: 10,
+  },
+  username: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#1A2D40',
+  },
+  postTime: {
+    fontSize: 12,
+    color: '#8798AD',
   },
   postContent: {
-    fontSize: hp('1.7%'),
-    color: '#2E384D',
-    marginBottom: hp('1%'),
+    fontSize: 14,
+    color: '#1A2D40',
+    marginBottom: 10,
+    lineHeight: 20,
   },
   postImage: {
     width: '100%',
-    height: hp('20%'),
+    height: hp(20),
     borderRadius: 8,
-    marginBottom: hp('1%'),
+    marginBottom: 10,
   },
-  postStats: {
+  postFooter: {
     flexDirection: 'row',
+    marginTop: 5,
   },
   postStat: {
-    fontSize: hp('1.5%'),
-    color: '#8798AD',
-    marginRight: wp('3%'),
-  },
-  loadingContainer: {
-    height: hp('20%'),
-    justifyContent: 'center',
+    flexDirection: 'row',
     alignItems: 'center',
+    marginRight: 15,
+  },
+  statText: {
+    fontSize: 12,
+    color: '#8798AD',
+    marginLeft: 4,
+  },
+  loader: {
+    marginVertical: hp(5),
   },
   emptyContainer: {
-    padding: wp('4%'),
-    backgroundColor: '#FFFFFF',
-    borderRadius: 10,
     alignItems: 'center',
-    justifyContent: 'center',
-    height: hp('15%'),
+    paddingVertical: hp(3),
   },
   emptyText: {
+    fontSize: 14,
     color: '#8798AD',
     textAlign: 'center',
-    fontSize: hp('1.8%'),
   },
 });
 

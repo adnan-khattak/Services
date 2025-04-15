@@ -5,66 +5,29 @@ import {
   StyleSheet,
   TextInput,
   TouchableOpacity,
-  Image,
   ScrollView,
   ActivityIndicator,
   Alert,
   Platform,
+  SafeAreaView,
 } from 'react-native';
 import { heightPercentageToDP as hp, widthPercentageToDP as wp } from 'react-native-responsive-screen';
 import { useNavigation } from '@react-navigation/native';
 import { supabase } from '../utils/supabaseClient';
+import { uploadMultipleFiles } from '../utils/cloudinaryClient';
 import { SessionContext } from '../../App';
 import Ionicons from 'react-native-vector-icons/Ionicons';
-import { launchImageLibrary } from 'react-native-image-picker';
+import { Asset } from 'react-native-image-picker';
+import MediaPicker from '../components/MediaPicker';
+import { showInterstitialAd } from '../utils/adUtils';
 
 const NewPostScreen = () => {
   const navigation = useNavigation();
   const { session } = useContext(SessionContext);
   const [content, setContent] = useState('');
-  const [selectedMedia, setSelectedMedia] = useState<any[]>([]);
+  const [mediaFiles, setMediaFiles] = useState<Asset[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(0);
-
-  const pickMedia = async () => {
-    try {
-      const result = await launchImageLibrary({
-        mediaType: 'photo', // Changed to photo only for better compatibility
-        maxWidth: 800,
-        maxHeight: 800,
-        quality: 0.7,
-        selectionLimit: 3,
-      });
-      
-      if (result.didCancel) {
-        return;
-      }
-      
-      if (result.errorCode) {
-        Alert.alert('Error', result.errorMessage || 'Unknown error occurred');
-        return;
-      }
-      
-      if (result.assets) {
-        // Limit to 3 media files total
-        if (selectedMedia.length + result.assets.length > 3) {
-          Alert.alert('Limit Exceeded', 'You can only upload up to 3 images');
-          return;
-        }
-        
-        setSelectedMedia([...selectedMedia, ...result.assets]);
-      }
-    } catch (err) {
-      console.error('Error picking media:', err);
-      Alert.alert('Error', 'Failed to pick media');
-    }
-  };
-
-  const removeMedia = (index: number) => {
-    const updatedMedia = [...selectedMedia];
-    updatedMedia.splice(index, 1);
-    setSelectedMedia(updatedMedia);
-  };
 
   const handleSubmit = async () => {
     if (!content.trim()) {
@@ -81,82 +44,27 @@ const NewPostScreen = () => {
     setUploadProgress(0);
 
     try {
-      // Check if post_media bucket exists, create if not
-      const { data: buckets } = await supabase.storage.listBuckets();
-      const postMediaBucket = buckets?.find(bucket => bucket.name === 'post_media');
+      // Upload media files to Cloudinary
+      const mediaUrls = [];
       
-      if (!postMediaBucket) {
-        // Create bucket if it doesn't exist
-        const { error: bucketError } = await supabase.storage.createBucket('post_media', {
-          public: true,
-          fileSizeLimit: 5242880, // 5MB
-        });
-        if (bucketError) {
-          console.warn('Error creating bucket:', bucketError);
-          // Continue anyway, we'll try to upload
+      if (mediaFiles.length > 0) {
+        try {
+          // Upload to Cloudinary
+          const urls = await uploadMultipleFiles(
+            mediaFiles, 
+            'posts', // Folder name in Cloudinary
+            (progress) => setUploadProgress(progress * 0.7) // 70% of the progress is for upload
+          );
+          
+          mediaUrls.push(...urls);
+        } catch (error) {
+          console.error('Error uploading media to Cloudinary:', error);
+          // Continue without media if upload fails
         }
       }
 
-      const mediaUrls: string[] = [];
-
-      // Upload media files if any
-      if (selectedMedia.length > 0) {
-        let uploadedCount = 0;
-        
-        for (const media of selectedMedia) {
-          try {
-            // Skip upload if the upload fails after 2 retries
-            let uploadSuccess = false;
-            let retryCount = 0;
-            
-            while (!uploadSuccess && retryCount < 3) {
-              try {
-                // Convert URI to blob
-                const response = await fetch(media.uri);
-                const blob = await response.blob();
-                
-                // Create unique file name
-                const fileName = `${Date.now()}_${Math.random().toString(36).substring(2, 15)}`;
-                const fileExt = (media.uri.split('.').pop() || 'jpg').toLowerCase();
-                
-                // Upload media
-                const { data, error } = await supabase.storage
-                  .from('post_media')
-                  .upload(`${fileName}.${fileExt}`, blob);
-                  
-                if (error) throw error;
-                
-                // Get public URL
-                const { data: urlData } = supabase.storage
-                  .from('post_media')
-                  .getPublicUrl(data?.path || '');
-                  
-                mediaUrls.push(urlData.publicUrl);
-                uploadSuccess = true;
-              } catch (error) {
-                console.error(`Retry ${retryCount + 1} - Error uploading media:`, error);
-                retryCount++;
-                // Short delay before retry
-                await new Promise(resolve => setTimeout(resolve, 1000));
-              }
-            }
-            
-            // Update progress
-            uploadedCount++;
-            setUploadProgress(Math.round((uploadedCount / selectedMedia.length) * 50)); // First 50% is uploads
-            
-            if (!uploadSuccess) {
-              console.warn('Failed to upload media after 3 retries, continuing without this image');
-            }
-          } catch (error) {
-            console.error('Error during media upload:', error);
-            // Continue with other uploads
-          }
-        }
-      }
-
-      // Create post even if some media uploads failed
-      setUploadProgress(75); // 75% - Starting post creation
+      // Create post
+      setUploadProgress(80); // 80% - Uploads complete, creating post
       
       const { data, error } = await supabase
         .from('posts')
@@ -174,40 +82,24 @@ const NewPostScreen = () => {
       setUploadProgress(100);
       console.log('Post created successfully:', data);
 
+      // Show interstitial ad after successful post creation
+      try {
+        await showInterstitialAd();
+      } catch (adError) {
+        console.log('Ad display error:', adError);
+        // Continue even if ad fails to display
+      }
+
       Alert.alert('Success', 'Your post has been published', [
         { text: 'OK', onPress: () => navigation.goBack() }
       ]);
     } catch (error: any) {
       console.error('Error creating post:', error);
       
-      // Try to create post without media if media upload failed
-      if (selectedMedia.length > 0) {
-        try {
-          const { data, error } = await supabase
-            .from('posts')
-            .insert([{
-              user_id: session.user.id,
-              content: content.trim(),
-              media: null,
-              likes: 0,
-              comments: 0,
-            }])
-            .select();
-            
-          if (error) throw error;
-          
-          Alert.alert(
-            'Partial Success', 
-            'Your post was created but we couldn\'t upload your images. You can edit the post later to add images.',
-            [{ text: 'OK', onPress: () => navigation.goBack() }]
-          );
-          return;
-        } catch (fallbackError) {
-          console.error('Fallback post creation also failed:', fallbackError);
-        }
-      }
-      
-      Alert.alert('Error', error.message || 'Failed to create post');
+      Alert.alert(
+        'Error', 
+        'Failed to create post. Please try again.'
+      );
     } finally {
       setIsLoading(false);
       setUploadProgress(0);
@@ -215,129 +107,121 @@ const NewPostScreen = () => {
   };
 
   return (
-    <ScrollView style={styles.container}>
-      <TextInput
-        style={styles.contentInput}
-        placeholder="What's on your mind?"
-        value={content}
-        onChangeText={setContent}
-        multiline
-        numberOfLines={5}
-        placeholderTextColor="#8798AD"
-      />
-
-      {selectedMedia.length > 0 && (
-        <ScrollView horizontal style={styles.mediaPreviewContainer}>
-          {selectedMedia.map((media, index) => (
-            <View key={index} style={styles.mediaPreviewItem}>
-              <Image source={{ uri: media.uri }} style={styles.mediaPreview} />
-              <TouchableOpacity
-                style={styles.removeMediaButton}
-                onPress={() => removeMedia(index)}
-              >
-                <Ionicons name="close-circle" size={24} color="#FF4D4F" />
-              </TouchableOpacity>
-            </View>
-          ))}
-        </ScrollView>
-      )}
-
-      <View style={styles.actionContainer}>
-        <TouchableOpacity style={styles.mediaButton} onPress={pickMedia}>
-          <Ionicons name="image-outline" size={24} color="#4E8AF4" />
-          <Text style={styles.mediaButtonText}>Add Photos</Text>
-        </TouchableOpacity>
-
-        <TouchableOpacity
-          style={styles.submitButton}
-          onPress={handleSubmit}
-          disabled={isLoading}
-        >
-          {isLoading ? (
-            <>
-              <ActivityIndicator color="#FFFFFF" />
-              {uploadProgress > 0 && (
-                <Text style={styles.progressText}>{uploadProgress}%</Text>
-              )}
-            </>
-          ) : (
-            <Text style={styles.submitButtonText}>Post</Text>
-          )}
-        </TouchableOpacity>
-      </View>
-    </ScrollView>
+    <SafeAreaView style={styles.safeArea}>
+      <ScrollView style={styles.container}>
+        <View style={styles.header}>
+          <TouchableOpacity 
+            style={styles.cancelButton} 
+            onPress={() => navigation.goBack()}
+          >
+            <Ionicons name="close-outline" size={28} color="#1A2D40" />
+          </TouchableOpacity>
+          <Text style={styles.headerTitle}>New Discussion</Text>
+          <TouchableOpacity 
+            style={[
+              styles.postButton, 
+              (!content.trim() || isLoading) && styles.disabledButton
+            ]}
+            onPress={handleSubmit}
+            disabled={!content.trim() || isLoading}
+          >
+            <Text style={styles.postButtonText}>Post</Text>
+          </TouchableOpacity>
+        </View>
+        
+        <View style={styles.contentContainer}>
+          <TextInput
+            style={styles.contentInput}
+            placeholder="What's on your mind?"
+            placeholderTextColor="#8798AD"
+            multiline
+            value={content}
+            onChangeText={setContent}
+            maxLength={2000}
+          />
+          
+          {/* Media Picker Component */}
+          <MediaPicker 
+            mediaFiles={mediaFiles}
+            setMediaFiles={setMediaFiles}
+            mediaType="POST"
+          />
+        </View>
+        
+        {isLoading && (
+          <View style={styles.loadingContainer}>
+            <ActivityIndicator size="small" color="#2B7CE5" />
+            <Text style={styles.loadingText}>
+              {uploadProgress > 0 ? `Processing (${uploadProgress}%)` : 'Processing...'}
+            </Text>
+          </View>
+        )}
+      </ScrollView>
+    </SafeAreaView>
   );
 };
 
 const styles = StyleSheet.create({
+  safeArea: {
+    flex: 1,
+    backgroundColor: '#FFFFFF',
+  },
   container: {
     flex: 1,
-    backgroundColor: '#F5F7FA',
-    padding: wp('5%'),
+    backgroundColor: '#FFFFFF',
+  },
+  header: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: wp(4),
+    paddingVertical: hp(1.5),
+    borderBottomWidth: 1,
+    borderBottomColor: '#F0F2F5',
+  },
+  headerTitle: {
+    fontSize: 18,
+    fontWeight: '600',
+    color: '#1A2D40',
+  },
+  cancelButton: {
+    padding: 5,
+  },
+  postButton: {
+    backgroundColor: '#2B7CE5',
+    paddingVertical: hp(1),
+    paddingHorizontal: wp(4),
+    borderRadius: 20,
+  },
+  postButtonText: {
+    color: '#FFFFFF',
+    fontWeight: '600',
+    fontSize: 14,
+  },
+  disabledButton: {
+    backgroundColor: '#B4C4E0',
+  },
+  contentContainer: {
+    padding: wp(4),
   },
   contentInput: {
-    backgroundColor: '#FFFFFF',
-    borderRadius: 10,
-    padding: hp('2%'),
-    minHeight: hp('15%'),
-    fontSize: hp('1.8%'),
-    color: '#2E384D',
+    fontSize: 16,
+    color: '#1A2D40',
+    minHeight: hp(15),
     textAlignVertical: 'top',
-    marginBottom: hp('2%'),
+    paddingTop: 0,
+    marginBottom: hp(2),
   },
-  mediaPreviewContainer: {
-    flexDirection: 'row',
-    marginBottom: hp('2%'),
-  },
-  mediaPreviewItem: {
-    position: 'relative',
-    marginRight: wp('2%'),
-  },
-  mediaPreview: {
-    width: wp('30%'),
-    height: wp('30%'),
-    borderRadius: 8,
-  },
-  removeMediaButton: {
-    position: 'absolute',
-    top: 5,
-    right: 5,
-    backgroundColor: 'rgba(255, 255, 255, 0.8)',
-    borderRadius: 12,
-  },
-  actionContainer: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginTop: hp('1%'),
-  },
-  mediaButton: {
+  loadingContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    padding: hp('1%'),
+    justifyContent: 'center',
+    padding: wp(4),
   },
-  mediaButtonText: {
-    color: '#4E8AF4',
-    marginLeft: wp('1%'),
-    fontSize: hp('1.6%'),
-  },
-  submitButton: {
-    backgroundColor: '#4E8AF4',
-    paddingVertical: hp('1.5%'),
-    paddingHorizontal: wp('7%'),
-    borderRadius: 25,
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  submitButtonText: {
-    color: '#FFFFFF',
-    fontWeight: 'bold',
-    fontSize: hp('1.7%'),
-  },
-  progressText: {
-    color: '#FFFFFF',
-    marginLeft: 5,
-    fontSize: hp('1.4%'),
+  loadingText: {
+    marginLeft: wp(2),
+    color: '#8798AD',
+    fontSize: 14,
   },
 });
 

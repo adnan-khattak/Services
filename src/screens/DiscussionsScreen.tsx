@@ -1,11 +1,24 @@
-import React, { useState, useEffect, useContext } from 'react';
-import { View, Text, StyleSheet, FlatList, TouchableOpacity, Image, ActivityIndicator, Alert } from 'react-native';
+import React, { useState, useEffect, useContext, useCallback } from 'react';
+import { 
+  View, 
+  Text, 
+  StyleSheet, 
+  FlatList, 
+  TouchableOpacity, 
+  Image, 
+  ActivityIndicator, 
+  Alert,
+  RefreshControl,
+  SafeAreaView
+} from 'react-native';
 import { heightPercentageToDP as hp, widthPercentageToDP as wp } from 'react-native-responsive-screen';
 import { useNavigation } from '@react-navigation/native';
 import { StackNavigationProp } from '@react-navigation/stack';
 import { supabase } from '../utils/supabaseClient';
 import { SessionContext } from '../../App';
 import { format, formatDistanceToNow } from 'date-fns';
+import Ionicons from 'react-native-vector-icons/Ionicons';
+import SearchBar from '../components/SearchBar';
 
 type RootStackParamList = {
   Discussions: undefined;
@@ -35,12 +48,30 @@ const DiscussionsScreen = () => {
   const navigation = useNavigation<DiscussionsScreenNavigationProp>();
   const { session } = useContext(SessionContext);
   const [posts, setPosts] = useState<Post[]>([]);
+  const [filteredPosts, setFilteredPosts] = useState<Post[]>([]);
+  const [searchQuery, setSearchQuery] = useState('');
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
 
   useEffect(() => {
     fetchPosts();
   }, []);
+
+  // Filter posts based on search query
+  useEffect(() => {
+    if (searchQuery.trim() === '') {
+      setFilteredPosts(posts);
+      return;
+    }
+
+    const query = searchQuery.toLowerCase();
+    const filtered = posts.filter(post => 
+      post.content.toLowerCase().includes(query) ||
+      (post.profile?.username || '').toLowerCase().includes(query)
+    );
+    
+    setFilteredPosts(filtered);
+  }, [searchQuery, posts]);
 
   // Check if user has liked posts
   useEffect(() => {
@@ -117,8 +148,10 @@ const DiscussionsScreen = () => {
         });
         
         setPosts(postsWithProfiles);
+        setFilteredPosts(postsWithProfiles);
       } else {
         setPosts([]);
+        setFilteredPosts([]);
       }
     } catch (error) {
       console.error('Error fetching posts:', error);
@@ -133,6 +166,10 @@ const DiscussionsScreen = () => {
     fetchPosts();
   };
 
+  const handleSearch = (text: string) => {
+    setSearchQuery(text);
+  };
+
   const handleLikePost = async (postId: string) => {
     if (!session?.user) {
       Alert.alert('Error', 'You need to be logged in to like posts');
@@ -145,6 +182,20 @@ const DiscussionsScreen = () => {
     
     // Update UI optimistically
     setPosts(prevPosts => 
+      prevPosts.map(post => {
+        if (post.id === postId) {
+          return { 
+            ...post, 
+            likes: post.isLiked ? post.likes - 1 : post.likes + 1,
+            isLiked: !post.isLiked 
+          };
+        }
+        return post;
+      })
+    );
+    
+    // Also update filtered posts
+    setFilteredPosts(prevPosts => 
       prevPosts.map(post => {
         if (post.id === postId) {
           return { 
@@ -203,217 +254,268 @@ const DiscussionsScreen = () => {
         })
       );
       
-      Alert.alert('Error', 'Failed to update like status');
+      setFilteredPosts(prevPosts => 
+        prevPosts.map(p => {
+          if (p.id === postId) {
+            return { 
+              ...p, 
+              likes: p.isLiked ? p.likes + 1 : p.likes - 1,
+              isLiked: !p.isLiked 
+            };
+          }
+          return p;
+        })
+      );
     }
   };
-  
+
   const formatTimestamp = (timestamp: string) => {
     try {
-      const date = new Date(timestamp);
-      return formatDistanceToNow(date, { addSuffix: true });
+      return formatDistanceToNow(new Date(timestamp), { addSuffix: true });
     } catch (error) {
       return 'recently';
     }
   };
 
   const renderPostItem = ({ item }: { item: Post }) => (
-    <View style={styles.postCard}>
+    <TouchableOpacity 
+      style={styles.postCard}
+      onPress={() => navigation.navigate('PostDetails', { postId: item.id })}
+    >
       <View style={styles.postHeader}>
-        <View style={styles.userInfo}>
-          {item.profile?.avatar_url ? (
-            <Image source={{ uri: item.profile.avatar_url }} style={styles.avatar} />
-          ) : (
-            <View style={[styles.avatar, styles.placeholderAvatar]}>
-              <Text style={styles.avatarText}>
-                {item.profile?.username?.[0]?.toUpperCase() || '?'}
-              </Text>
-            </View>
-          )}
-          <View>
-            <Text style={styles.username}>{item.profile?.username || 'Anonymous'}</Text>
-            <Text style={styles.timestamp}>{formatTimestamp(item.created_at)}</Text>
-          </View>
+        <Image 
+          source={{ 
+            uri: item.profile?.avatar_url || `https://ui-avatars.com/api/?name=${item.profile?.username || 'User'}`
+          }} 
+          style={styles.userAvatar} 
+        />
+        <View style={styles.headerInfo}>
+          <Text style={styles.username}>{item.profile?.username || 'Anonymous User'}</Text>
+          <Text style={styles.timestamp}>{formatTimestamp(item.created_at)}</Text>
         </View>
       </View>
-
-      <Text style={styles.postContent}>{item.content}</Text>
+      
+      <Text style={styles.postContent} numberOfLines={5}>{item.content}</Text>
       
       {item.media && item.media.length > 0 && (
-        <Image source={{ uri: item.media[0] }} style={styles.postMedia} />
+        <Image 
+          source={{ uri: item.media[0] }} 
+          style={styles.postImage} 
+          resizeMode="cover"
+        />
       )}
       
-      <View style={styles.postActions}>
+      <View style={styles.postFooter}>
         <TouchableOpacity 
-          style={styles.actionButton} 
+          style={styles.likeButton}
           onPress={() => handleLikePost(item.id)}
         >
-          <Text style={[styles.actionText, item.isLiked && styles.likedText]}>
-            {item.likes} {item.likes === 1 ? 'Like' : 'Likes'}
+          <Ionicons 
+            name={item.isLiked ? "heart" : "heart-outline"} 
+            size={20} 
+            color={item.isLiked ? "#F23B5F" : "#8798AD"} 
+          />
+          <Text style={[styles.footerText, item.isLiked && styles.likedText]}>
+            {item.likes} {item.likes === 1 ? 'like' : 'likes'}
           </Text>
         </TouchableOpacity>
         
-        <TouchableOpacity 
-          style={styles.actionButton}
-          onPress={() => navigation.navigate('PostDetails', { postId: item.id })}
-        >
-          <Text style={styles.actionText}>
-            {item.comments} {item.comments === 1 ? 'Comment' : 'Comments'}
+        <View style={styles.commentButton}>
+          <Ionicons name="chatbubble-outline" size={18} color="#8798AD" />
+          <Text style={styles.footerText}>
+            {item.comments} {item.comments === 1 ? 'comment' : 'comments'}
           </Text>
-        </TouchableOpacity>
+        </View>
       </View>
-    </View>
+    </TouchableOpacity>
   );
 
   return (
-    <View style={styles.container}>
+    <SafeAreaView style={styles.container}>
+            <View style={styles.header}>
+        <View style={styles.titleContainer}>
+          <Text style={styles.appTitle}>Discussions</Text>
+          <SearchBar 
+            onSearch={handleSearch}
+            placeholder="Search posts..."
+            width={wp(60)}
+            compact={true}
+            containerStyle={styles.searchBarContainer}
+          />
+        </View>
+      </View>
+      {/* <SearchBar 
+        onSearch={handleSearch}
+        placeholder="Search discussions..."
+      /> */}
+      
       {loading && !refreshing ? (
         <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color="#4E8AF4" />
+          <ActivityIndicator size="large" color="#2B7CE5" />
         </View>
       ) : (
         <FlatList
-          data={posts}
+          data={filteredPosts}
           renderItem={renderPostItem}
-          keyExtractor={item => item.id.toString()}
-          showsVerticalScrollIndicator={false}
+          keyExtractor={item => item.id}
           contentContainerStyle={styles.listContent}
-          refreshing={refreshing}
-          onRefresh={handleRefresh}
+          refreshControl={
+            <RefreshControl
+              refreshing={refreshing}
+              onRefresh={handleRefresh}
+              colors={['#2B7CE5']}
+              tintColor="#2B7CE5"
+            />
+          }
           ListEmptyComponent={
             <View style={styles.emptyContainer}>
-              <Text style={styles.emptyText}>No discussions yet. Start a new one!</Text>
+              <Text style={styles.emptyText}>
+                {searchQuery ? 'No discussions match your search.' : 'No discussions yet. Start a new one!'}
+              </Text>
             </View>
           }
         />
       )}
       
-      <TouchableOpacity 
-        style={styles.newPostButton}
-        onPress={() => navigation.navigate('NewPost')}
-      >
-        <Text style={styles.newPostButtonText}>New Discussion</Text>
-      </TouchableOpacity>
-    </View>
+      {session && (
+        <TouchableOpacity 
+          style={styles.floatingButton}
+          onPress={() => navigation.navigate('NewPost')}
+        >
+          <Ionicons name="add" size={24} color="#FFFFFF" />
+        </TouchableOpacity>
+      )}
+    </SafeAreaView>
   );
 };
 
 const styles = StyleSheet.create({
+  header: {
+    backgroundColor: '#FFFFFF',
+    paddingHorizontal: wp(4),
+    paddingVertical: hp(1),
+    borderBottomWidth: 1,
+    borderBottomColor: '#F0F2F5',
+  },
+  titleContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  appTitle: {
+    fontSize: 20,
+    fontWeight: '700',
+    color: '#000',
+  },
+  searchBarContainer: {
+    flex: 1,
+    alignItems: 'flex-end',
+  },
   container: {
     flex: 1,
-    backgroundColor: '#F5F7FA',
-  },
-  listContent: {
-    padding: wp('4%'),
-  },
-  postCard: {
     backgroundColor: '#FFFFFF',
-    borderRadius: 10,
-    padding: wp('4%'),
-    marginBottom: hp('2%'),
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 3,
-    elevation: 3,
-  },
-  postHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    marginBottom: hp('1.5%'),
-  },
-  userInfo: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  avatar: {
-    width: hp('5%'),
-    height: hp('5%'),
-    borderRadius: hp('2.5%'),
-    marginRight: wp('2%'),
-  },
-  placeholderAvatar: {
-    backgroundColor: '#4E8AF4',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  avatarText: {
-    color: '#FFFFFF',
-    fontWeight: 'bold',
-    fontSize: hp('2%'),
-  },
-  username: {
-    fontSize: hp('1.8%'),
-    fontWeight: 'bold',
-    color: '#2E384D',
-  },
-  timestamp: {
-    fontSize: hp('1.3%'),
-    color: '#8798AD',
-  },
-  postContent: {
-    fontSize: hp('1.7%'),
-    color: '#2E384D',
-    lineHeight: hp('2.3%'),
-    marginBottom: hp('1.5%'),
-  },
-  postMedia: {
-    width: '100%',
-    height: hp('25%'),
-    borderRadius: 8,
-    marginBottom: hp('1.5%'),
-  },
-  postActions: {
-    flexDirection: 'row',
-    borderTopWidth: 1,
-    borderTopColor: '#E4E8F0',
-    paddingTop: hp('1.5%'),
-  },
-  actionButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginRight: wp('5%'),
-  },
-  actionText: {
-    fontSize: hp('1.5%'),
-    color: '#8798AD',
-  },
-  likedText: {
-    color: '#4E8AF4',
-    fontWeight: '500',
-  },
-  newPostButton: {
-    position: 'absolute',
-    right: wp('5%'),
-    bottom: hp('2%'),
-    backgroundColor: '#4E8AF4',
-    paddingVertical: hp('1.5%'),
-    paddingHorizontal: wp('5%'),
-    borderRadius: 25,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.2,
-    shadowRadius: 3,
-    elevation: 5,
-  },
-  newPostButtonText: {
-    color: '#FFFFFF',
-    fontWeight: 'bold',
-    fontSize: hp('1.7%'),
   },
   loadingContainer: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
   },
+  listContent: {
+    padding: wp(4),
+    paddingBottom: hp(10), // Add extra padding for the floating button
+  },
+  postCard: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 8,
+    padding: 15,
+    marginBottom: hp(2),
+    elevation: 1,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.1,
+    shadowRadius: 2,
+  },
+  postHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 10,
+  },
+  userAvatar: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    marginRight: 10,
+  },
+  headerInfo: {
+    flex: 1,
+  },
+  username: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#1A2D40',
+  },
+  timestamp: {
+    fontSize: 12,
+    color: '#8798AD',
+  },
+  postContent: {
+    fontSize: 14,
+    color: '#1A2D40',
+    marginBottom: 10,
+    lineHeight: 20,
+  },
+  postImage: {
+    width: '100%',
+    height: wp(50),
+    borderRadius: 8,
+    marginBottom: 10,
+  },
+  postFooter: {
+    flexDirection: 'row',
+    marginTop: 5,
+  },
+  likeButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginRight: 20,
+  },
+  commentButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  footerText: {
+    fontSize: 12,
+    color: '#8798AD',
+    marginLeft: 4,
+  },
+  likedText: {
+    color: '#F23B5F',
+  },
   emptyContainer: {
-    padding: hp('3%'),
+    padding: hp(5),
     alignItems: 'center',
     justifyContent: 'center',
   },
   emptyText: {
+    fontSize: 14,
     color: '#8798AD',
-    fontSize: hp('1.8%'),
     textAlign: 'center',
+  },
+  floatingButton: {
+    position: 'absolute',
+    bottom: 20,
+    right: 20,
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    backgroundColor: '#2B7CE5',
+    justifyContent: 'center',
+    alignItems: 'center',
+    elevation: 4,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.25,
+    shadowRadius: 3,
   },
 });
 

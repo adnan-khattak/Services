@@ -16,7 +16,7 @@ import { SessionContext } from '../../App';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { StatusBar } from 'react-native';
 import { useNavigation, NavigationProp } from '@react-navigation/native';
-
+import logo1 from '../assets/logo1.png';
 // Define the navigation param list type
 type RootStackParamList = {
   Auth: undefined;
@@ -117,11 +117,13 @@ const AuthScreen = () => {
   
   return (
     <ScrollView contentContainerStyle={styles.container}>
+      {/* <View style={styles.logoContainer}> */}
+        {/* <Logo size={hp('15%')} /> */}
+        {/* <Text style={styles.appName}>Services App</Text> */}
+      {/* </View> */}
       <View style={styles.logoContainer}>
-        <Logo size={hp('15%')} />
-        <Text style={styles.appName}>Services App</Text>
+      <Logo size={180} color="#273AA1" imageSource={logo1} />
       </View>
-      
       <Text style={styles.headerText}>
         {isLogin ? 'Welcome Back!' : 'Create an Account'}
       </Text>
@@ -203,6 +205,7 @@ const styles = StyleSheet.create({
   logoContainer: {
     alignItems: 'center',
     marginBottom: hp('5%'),
+
   },
   appName: {
     fontSize: hp('3%'),
@@ -230,7 +233,7 @@ const styles = StyleSheet.create({
     borderColor: '#E4E8F0',
   },
   authButton: {
-    backgroundColor: '#4E8AF4',
+    backgroundColor: '#273AA1',
     borderRadius: 10,
     padding: hp('1.8%'),
     alignItems: 'center',

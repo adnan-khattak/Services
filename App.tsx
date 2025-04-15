@@ -13,6 +13,7 @@ import { Session } from '@supabase/supabase-js';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { View, ActivityIndicator, StatusBar, LogBox, Platform } from 'react-native';
 import { AuthProvider } from './src/contexts/AuthContext';
+import { initializeAds } from './src/utils/adUtils';
 
 // Ignore specific warnings
 LogBox.ignoreLogs([
@@ -34,6 +35,15 @@ function App(): JSX.Element {
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
+    // Initialize Google Mobile Ads
+    initializeAds()
+      .then(success => {
+        console.log('Ads initialization:', success ? 'successful' : 'failed');
+      })
+      .catch(error => {
+        console.error('Error initializing ads:', error);
+      });
+
     // Check for existing session
     supabase.auth.getSession().then(({ data: { session } }) => {
       setSession(session);
