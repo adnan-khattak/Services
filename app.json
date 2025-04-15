@@ -1,8 +1,4 @@
 {
   "name": "ServiceApp",
-  "displayName": "ServiceApp",
-  "react-native-google-mobile-ads": {
-    "android_app_id": "ca-app-pub-xxxxxxxxxxxxxxxx~yyyyyyyyyy",
-    "ios_app_id": "ca-app-pub-xxxxxxxxxxxxxxxx~zzzzzzzzzz"
-  }
+  "displayName": "ServiceApp"
 }

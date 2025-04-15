@@ -28,9 +28,5 @@
             <category android:name="android.intent.category.LAUNCHER" />
         </intent-filter>
       </activity>
-      <!-- Google Mobile Ads implementation -->
-      <meta-data
-          android:name="com.google.android.gms.ads.APPLICATION_ID"
-          android:value="ca-app-pub-xxxxxxxxxxxxxxxx~yyyyyyyyyy"/> <!-- Replace with your app ID -->
     </application>
 </manifest>
