@@ -1,4 +1,7 @@
 {
   "name": "ServiceApp",
-  "displayName": "ServiceApp"
+  "displayName": "ServiceApp",
+  "react-native-google-mobile-ads": {
+    "ios_app_id": "ca-app-pub-6601945920254915~7147713882"
+  }
 }

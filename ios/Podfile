@@ -1,20 +1,10 @@
 require_relative '../node_modules/react-native/scripts/react_native_pods'
-# require_relative '../node_modules/react-native/scripts/flipper_configuration'
 require_relative '../node_modules/@react-native-community/cli-platform-ios/native_modules'
 
-platform :ios, min_ios_version_supported
+platform :ios, '15.1' # Ensure this is 14.4+
+
 prepare_react_native_project!
 
-# If you are using a `react-native-flipper` your iOS build will fail when `NO_FLIPPER=1` is set.
-# because `react-native-flipper` depends on (FlipperKit,...) that will be excluded
-#
-# To fix this you can also exclude `react-native-flipper` using a `react-native.config.js`
-# ```js
-# module.exports = {
-#   dependencies: {
-#     ...(process.env.NO_FLIPPER ? { 'react-native-flipper': { platforms: { ios: null } } } : {}),
-# ```
-# flipper_config = ENV['NO_FLIPPER'] == "1" ? FlipperConfiguration.disabled : FlipperConfiguration.enabled
 flipper_config = nil
 
 linkage = ENV['USE_FRAMEWORKS']
@@ -26,46 +16,34 @@ end
 target 'ServiceApp' do
   config = use_native_modules!
 
-  # Flags change depending on the env values.
   flags = get_default_flags()
 
   use_react_native!(
     :path => config[:reactNativePath],
-    # Hermes is now enabled by default. Disable by setting this flag to false.
-    :hermes_enabled => flags[:hermes_enabled],
-    # Enables Fabric (i.e. React Native version 0.70+ Fabric renderer).
+    :hermes_enabled => flags[:hermes_enabled], # Hermes enabled
     :fabric_enabled => flags[:fabric_enabled],
-    # Enables / disables Flipper.
-    #
-    # Note that if you have use_frameworks! enabled, Flipper will not work and
-    # you should disable the next line.
-    # :flipper_configuration => flipper_config,
-    # An absolute path to your application root.
     :app_path => "#{Pod::Config.instance.installation_root}/.."
   )
 
-  # React Native Vector Icons
+  # Custom native modules
   pod 'RNVectorIcons', :path => '../node_modules/react-native-vector-icons'
+  pod 'RNGoogleMobileAds', :path => '../node_modules/react-native-google-mobile-ads'
 
   target 'ServiceAppTests' do
     inherit! :complete
-    # Pods for testing
   end
 
   post_install do |installer|
-    # Ensure pods also support iOS 14
     installer.pods_project.targets.each do |target|
       target.build_configurations.each do |config|
-        config.build_settings['IPHONEOS_DEPLOYMENT_TARGET'] = '14.0'
+        config.build_settings['IPHONEOS_DEPLOYMENT_TARGET'] = '15.1'
       end
     end
 
-    # https://github.com/facebook/react-native/blob/main/packages/react-native/scripts/react_native_pods.rb#L197-L202
     react_native_post_install(
       installer,
       config[:reactNativePath],
       :mac_catalyst_enabled => false
     )
-    # __apply_Xcode_12_5_M1_post_install_workaround(installer)
   end
 end
