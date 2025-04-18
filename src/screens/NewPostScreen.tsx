@@ -8,7 +8,6 @@ import {
   ScrollView,
   ActivityIndicator,
   Alert,
-  Platform,
   SafeAreaView,
 } from 'react-native';
 import { heightPercentageToDP as hp, widthPercentageToDP as wp } from 'react-native-responsive-screen';
@@ -84,7 +83,9 @@ const NewPostScreen = () => {
 
       // Show interstitial ad after successful post creation
       try {
-        await showInterstitialAd();
+        console.log('Attempting to show interstitial ad after post creation');
+        const adDisplayed = await showInterstitialAd();
+        console.log('Interstitial ad display result:', adDisplayed ? 'Displayed successfully' : 'Failed to display');
       } catch (adError) {
         console.log('Ad display error:', adError);
         // Continue even if ad fails to display

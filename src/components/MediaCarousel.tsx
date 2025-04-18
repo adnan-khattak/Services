@@ -27,7 +27,7 @@ interface MediaCarouselProps {
 const MediaCarousel: React.FC<MediaCarouselProps> = ({
   media,
   height = hp(30),
-  width = SCREEN_WIDTH - 32,
+  width = SCREEN_WIDTH ,
   showPagination = true,
   autoPlay = false,
   onMediaPress

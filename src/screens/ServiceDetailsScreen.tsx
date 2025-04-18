@@ -54,96 +54,12 @@ const ServiceDetailsScreen = () => {
   const [providerProfile, setProviderProfile] = useState<ServiceProfile | null>(null);
   const [providerContact, setProviderContact] = useState<ServiceProvider | null>(null);
 
-  useEffect(() => {
-    fetchServiceDetails();
-  }, []);
-
-  const fetchServiceDetails = async () => {
-    try {
-      setLoading(true);
-      console.log('Fetching service details for ID:', initialService.id);
-
-      // First fetch the service details without attempting a join
-      const { data: serviceData, error: serviceError } = await supabase
-        .from('services')
-        .select('*')
-        .eq('id', initialService.id)
-        .single();
-
-      if (serviceError) {
-        console.error('Error fetching service data:', serviceError);
-        throw serviceError;
-      }
-
-      console.log('Service data fetched:', serviceData);
-
-      if (serviceData) {
-        // Then separately fetch the profile info using the user_id from service
-        console.log('Fetching profile for user_id:', serviceData.user_id);
-        
-        if (!serviceData.user_id) {
-          console.warn('No user_id found in service data');
-          setService(serviceData);
-          setProviderProfile(null);
-          return;
-        }
-
-        const { data: profileData, error: profileError } = await supabase
-          .from('profiles')
-          .select('username, avatar_url')
-          .eq('id', serviceData.user_id)
-          .single();
-
-        if (profileError) {
-          // Log but don't throw the error for profile fetch issues
-          console.error('Error fetching profile:', profileError);
-          
-          // Try a different approach if the first one fails - maybe the id field is different
-          console.log('Trying alternative profile fetch approach');
-          const { data: altProfileData, error: altProfileError } = await supabase
-            .from('profiles')
-            .select('username, avatar_url')
-            .eq('user_id', serviceData.user_id)
-            .single();
-            
-          if (!altProfileError && altProfileData) {
-            console.log('Alternative profile fetch successful:', altProfileData);
-            // Combine the data
-            const updatedService = {
-              ...serviceData,
-              profile: altProfileData
-            };
-            
-            setService(updatedService);
-            setProviderProfile(altProfileData);
-            await fetchServiceProviderInfo(serviceData.user_id);
-            return;
-          } else if (altProfileError) {
-            console.error('Alternative profile fetch also failed:', altProfileError);
-          }
-        }
-
-        // Combine the data
-        const updatedService = {
-          ...serviceData,
-          profile: profileData || null
-        };
-        
-        console.log('Setting service with profile:', profileData ? 'found' : 'not found');
-        setService(updatedService);
-        setProviderProfile(profileData || null);
-        await fetchServiceProviderInfo(serviceData.user_id);
-      }
-    } catch (error) {
-      console.error('Error fetching service details:', error);
-    } finally {
-      setLoading(false);
-    }
-  };
-
   // New function to fetch service provider info
-  const fetchServiceProviderInfo = async (userId: string) => {
+  const fetchServiceProviderInfo = React.useCallback(async (userId: string) => {
     try {
+      console.log('Fetching service provider info for user ID:', userId);
+      
+      // First try service_providers table
       const { data: providerData, error: providerError } = await supabase
         .from('service_providers')
         .select('contact_phone, contact_email')
@@ -151,24 +67,178 @@ const ServiceDetailsScreen = () => {
         .single();
       
       if (providerError) {
-        console.error('Error fetching service provider info:', providerError);
+        console.log('No data found in service_providers, trying profiles table');
+        
+        // Try profiles table which might contain contact info
+        const { data: profileData, error: profileError } = await supabase
+          .from('profiles')
+          .select('phone, email')
+          .eq('id', userId)
+          .single();
+          
+        if (!profileError && profileData) {
+          console.log('Found contact info in profiles:', profileData);
+          setProviderContact({
+            contact_phone: profileData.phone,
+            contact_email: profileData.email
+          });
+          return;
+        }
+        
+        // Last attempt - try users table
+        const { data: userData, error: userError } = await supabase
+          .from('users')
+          .select('phone, email')
+          .eq('id', userId)
+          .single();
+          
+        if (!userError && userData) {
+          console.log('Found contact info in users table:', userData);
+          setProviderContact({
+            contact_phone: userData.phone,
+            contact_email: userData.email
+          });
+          return;
+        }
+        
+        console.log('No contact info found in any table');
         return;
       }
       
       if (providerData) {
+        console.log('Found provider data:', providerData);
         setProviderContact(providerData);
       }
     } catch (error) {
       console.error('Error fetching service provider info:', error);
     }
-  };
+  }, []);
+
+  useEffect(() => {
+    const fetchServiceDetails = async () => {
+      try {
+        setLoading(true);
+        console.log('Fetching service details for ID:', initialService.id);
+  
+        // First fetch the service details without attempting a join
+        const { data: serviceData, error: serviceError } = await supabase
+          .from('services')
+          .select('*')
+          .eq('id', initialService.id)
+          .single();
+  
+        if (serviceError) {
+          console.error('Error fetching service data:', serviceError);
+          throw serviceError;
+        }
+  
+        console.log('Service data fetched:', serviceData);
+  
+        if (serviceData) {
+          // Then separately fetch the profile info using the user_id from service
+          console.log('Fetching profile for user_id:', serviceData.user_id);
+          
+          if (!serviceData.user_id) {
+            console.warn('No user_id found in service data');
+            setService(serviceData);
+            setProviderProfile(null);
+            return;
+          }
+  
+          const { data: profileData, error: profileError } = await supabase
+            .from('profiles')
+            .select('username, avatar_url')
+            .eq('id', serviceData.user_id)
+            .single();
+  
+          if (profileError) {
+            // Log but don't throw the error for profile fetch issues
+            console.error('Error fetching profile:', profileError);
+            
+            // Try a different approach if the first one fails - maybe the id field is different
+            console.log('Trying alternative profile fetch approach');
+            const { data: altProfileData, error: altProfileError } = await supabase
+              .from('profiles')
+              .select('username, avatar_url')
+              .eq('user_id', serviceData.user_id)
+              .single();
+              
+            if (!altProfileError && altProfileData) {
+              console.log('Alternative profile fetch successful:', altProfileData);
+              // Combine the data
+              const updatedService = {
+                ...serviceData,
+                profile: altProfileData
+              };
+              
+              setService(updatedService);
+              setProviderProfile(altProfileData);
+              await fetchServiceProviderInfo(serviceData.user_id);
+              return;
+            } else if (altProfileError) {
+              console.error('Alternative profile fetch also failed:', altProfileError);
+            }
+          }
+  
+          // Combine the data
+          const updatedService = {
+            ...serviceData,
+            profile: profileData || null
+          };
+          
+          console.log('Setting service with profile:', profileData ? 'found' : 'not found');
+          setService(updatedService);
+          setProviderProfile(profileData || null);
+          await fetchServiceProviderInfo(serviceData.user_id);
+        }
+      } catch (error) {
+        console.error('Error fetching service details:', error);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    if (initialService && initialService.id) {
+      fetchServiceDetails();
+    }
+  }, [initialService, fetchServiceProviderInfo]);
 
   const handleCallPress = () => {
-    const phoneNumber = providerContact?.contact_phone || '';
-    if (phoneNumber.trim()) {
-      Linking.openURL(`tel:${phoneNumber}`);
-    } else {
+    if (!providerContact || (!providerContact.contact_phone && !providerContact.contact_email)) {
       Alert.alert('No Contact Info', 'This service provider has not added contact information yet.');
+      return;
+    }
+    
+    const phoneNumber = providerContact.contact_phone;
+    const email = providerContact.contact_email;
+    
+    // If there's a phone number, use that first
+    if (phoneNumber && phoneNumber.trim()) {
+      const formattedNumber = phoneNumber.replace(/\D/g, ''); // Remove non-numeric chars
+      console.log('Dialing phone number:', formattedNumber);
+      Linking.openURL(`tel:${formattedNumber}`);
+    } 
+    // If there's no phone but there is an email, offer to email
+    else if (email && email.trim()) {
+      Alert.alert(
+        'Contact Provider',
+        'Would you like to send an email to this service provider?',
+        [
+          {
+            text: 'Cancel',
+            style: 'cancel'
+          },
+          {
+            text: 'Email',
+            onPress: () => {
+              console.log('Sending email to:', email);
+              Linking.openURL(`mailto:${email}`);
+            }
+          }
+        ]
+      );
+    } else {
+      Alert.alert('No Contact Methods', 'This service provider has not added any contact methods yet.');
     }
   };
 
@@ -206,7 +276,9 @@ const ServiceDetailsScreen = () => {
         <View style={styles.contentContainer}>
           <View style={styles.titleContainer}>
             <Text style={styles.title}>{service.title}</Text>
-            <Text style={styles.price}>{service.price}</Text>
+            <Text style={styles.price}>
+              {service.price.startsWith('$') ? service.price : `$${service.price}`}
+            </Text>
           </View>
           
           <View style={styles.infoRow}>
@@ -276,14 +348,14 @@ const styles = StyleSheet.create({
   header: {
     position: 'absolute',
     zIndex: 10,
-    top: Platform.OS === 'ios' ? 40 : 10,
-    left: 10,
+    top: Platform.OS === 'ios' ? hp(5) : 10,
+    left: wp(3),
   },
   backButton: {
     backgroundColor: 'rgba(255, 255, 255, 0.9)',
-    width: 40,
-    height: 40,
-    borderRadius: 20,
+    width: hp(5),
+    height: hp(5),
+    borderRadius: hp(2.5),
     alignItems: 'center',
     justifyContent: 'center',
     shadowColor: '#000',
@@ -299,13 +371,13 @@ const styles = StyleSheet.create({
     marginBottom: hp(2),
   },
   title: {
-    fontSize: wp(5.5),
+    fontSize: Math.min(wp(5.5), 24),
     fontWeight: '700',
     color: '#1A2D40',
     marginBottom: 6,
   },
   price: {
-    fontSize: wp(5),
+    fontSize: Math.min(wp(5), 22),
     fontWeight: '700',
     color: '#2B7CE5',
   },
@@ -321,7 +393,7 @@ const styles = StyleSheet.create({
     marginBottom: hp(1),
   },
   infoText: {
-    fontSize: 14,
+    fontSize: Math.min(14, wp(3.5)),
     color: '#8798AD',
     marginLeft: 6,
   },
@@ -329,15 +401,15 @@ const styles = StyleSheet.create({
     marginBottom: hp(3),
   },
   sectionTitle: {
-    fontSize: 18,
+    fontSize: Math.min(18, wp(4.5)),
     fontWeight: '600',
     color: '#1A2D40',
     marginBottom: hp(1),
   },
   description: {
-    fontSize: 15,
+    fontSize: Math.min(15, wp(3.8)),
     color: '#1A2D40',
-    lineHeight: 22,
+    lineHeight: Math.min(22, hp(3)),
   },
   divider: {
     height: 1,
@@ -387,11 +459,12 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     paddingVertical: hp(1.5),
     borderRadius: 8,
+    maxHeight: hp(7),
   },
   buttonText: {
     color: '#FFFFFF',
     fontWeight: '600',
-    fontSize: 15,
+    fontSize: Math.min(15, wp(3.8)),
     marginLeft: 8,
   },
 });

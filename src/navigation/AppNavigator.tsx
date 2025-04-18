@@ -148,7 +148,7 @@ const AppNavigator = () => {
           name="NewPost" 
           component={NewPostScreen}
           options={{
-            headerShown: true,
+            headerShown: false,
             title: 'New Discussion',
             headerTitleStyle: {
               fontWeight: 'bold',

@@ -247,7 +247,9 @@ const HomeScreen = () => {
       <View style={styles.serviceInfo}>
         <Text style={styles.serviceTitle} numberOfLines={1}>{service.title}</Text>
         <Text style={styles.serviceCategory}>{service.category}</Text>
-        <Text style={styles.servicePrice}>{service.price}</Text>
+        <Text style={styles.servicePrice}>
+          {service.price.startsWith('$') ? service.price : `$${service.price}`}
+        </Text>
       </View>
     </TouchableOpacity>
   );
@@ -281,30 +283,25 @@ const HomeScreen = () => {
           />
         }
       >
-        <View style={styles.section}>
+        <View style={styles.sectionContainer}>
           <View style={styles.sectionHeader}>
-            <Text style={styles.sectionTitle}>Popular Services</Text>
+            <Text style={styles.sectionTitle}>Services</Text>
             <TouchableOpacity onPress={() => navigation.navigate('Services')}>
-              <Text style={styles.seeMoreText}>See More</Text>
+              <Text style={styles.viewAllText}>View All</Text>
             </TouchableOpacity>
           </View>
           
-          {loadingServices && !refreshing ? (
-            <ActivityIndicator size="large" color="#2B7CE5" style={styles.loader} />
-          ) : filteredServices.length > 0 ? (
-            <ScrollView 
-              horizontal 
-              showsHorizontalScrollIndicator={false}
-              style={styles.servicesList}
-              contentContainerStyle={styles.servicesContainer}
-            >
-              {filteredServices.map(service => renderServiceItem(service))}
-            </ScrollView>
+          {loadingServices ? (
+            <View style={styles.loadingContainer}>
+              <ActivityIndicator size="small" color="#2B7CE5" />
+            </View>
+          ) : filteredServices.length === 0 ? (
+            <View style={styles.emptyStateContainer}>
+              <Text style={styles.emptyStateText}>No services found</Text>
+            </View>
           ) : (
-            <View style={styles.emptyContainer}>
-              <Text style={styles.emptyText}>
-                {searchQuery ? 'No matching services found' : 'No services available yet'}
-              </Text>
+            <View style={styles.servicesGrid}>
+              {filteredServices.map(service => renderServiceItem(service))}
             </View>
           )}
         </View>
@@ -411,7 +408,7 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: '#FFFFFF',
   },
-  section: {
+  sectionContainer: {
     marginBottom: hp(3),
   },
   sectionHeader: {
@@ -427,60 +424,31 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     color: '#1A2D40',
   },
-  seeMoreText: {
+  viewAllText: {
     fontSize: 14,
     color: '#2B7CE5',
     fontWeight: '500',
   },
-  servicesList: {
-    paddingLeft: wp(4),
-  },
-  servicesContainer: {
-    paddingRight: wp(4),
-    paddingVertical: hp(1),
-  },
-  serviceCard: {
-    width: wp(40),
-    marginRight: wp(3),
-    borderRadius: 12,
-    backgroundColor: '#FFFFFF',
-    overflow: 'hidden',
-    elevation: 2,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-  },
-  serviceImage: {
-    width: '100%',
-    height: hp(15),
-    backgroundColor: '#F5F8FA',
-  },
-  placeholderImage: {
-    width: '100%',
-    height: hp(15),
-    backgroundColor: '#F5F8FA',
+  loadingContainer: {
+    flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
   },
-  serviceInfo: {
-    padding: 12,
+  emptyStateContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
-  serviceTitle: {
+  emptyStateText: {
     fontSize: 14,
-    fontWeight: '600',
-    color: '#1A2D40',
-    marginBottom: 5,
-  },
-  serviceCategory: {
-    fontSize: 12,
     color: '#8798AD',
-    marginBottom: 5,
+    textAlign: 'center',
   },
-  servicePrice: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: '#2B7CE5',
+  servicesGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    justifyContent: 'space-evenly',
+    paddingHorizontal: wp(2),
   },
   postCard: {
     marginHorizontal: wp(4),
@@ -551,6 +519,54 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: '#8798AD',
     textAlign: 'center',
+  },
+  serviceCard: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 12,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.05,
+    shadowRadius: 10,
+    elevation: 2,
+    marginBottom: hp(2),
+    overflow: 'hidden',
+    width: wp(45),
+    maxWidth: 200,
+  },
+  serviceImage: {
+    width: '100%',
+    height: wp(28),
+    borderTopLeftRadius: 12,
+    borderTopRightRadius: 12,
+  },
+  placeholderImage: {
+    width: '100%',
+    height: wp(28),
+    backgroundColor: '#F5F8FA',
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderTopLeftRadius: 12,
+    borderTopRightRadius: 12,
+  },
+  serviceInfo: {
+    padding: wp(3),
+    paddingVertical: wp(2),
+  },
+  serviceTitle: {
+    fontSize: Math.min(14, wp(3.5)),
+    fontWeight: '600',
+    color: '#1A2D40',
+    marginBottom: 4,
+  },
+  serviceCategory: {
+    fontSize: Math.min(12, wp(3)),
+    color: '#8798AD',
+    marginBottom: 4,
+  },
+  servicePrice: {
+    fontSize: Math.min(14, wp(3.5)),
+    fontWeight: '700',
+    color: '#2B7CE5',
   },
 });
 

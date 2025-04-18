@@ -6,8 +6,7 @@ import {
   FlatList, 
   Image, 
   TouchableOpacity, 
-  ActivityIndicator, 
-  Alert, 
+  ActivityIndicator,
   RefreshControl, 
   SafeAreaView, 
   StatusBar,
@@ -59,28 +58,7 @@ const ServicesScreen = () => {
 
   const categories = ['All', 'Home', 'Beauty', 'Education', 'Other'];
 
-  useEffect(() => {
-    fetchServices();
-  }, [selectedCategory]);
-
-  // Filter services based on search query
-  useEffect(() => {
-    if (searchQuery.trim() === '') {
-      setFilteredServices(services);
-      return;
-    }
-
-    const query = searchQuery.toLowerCase();
-    const filtered = services.filter(service => 
-      service.title.toLowerCase().includes(query) || 
-      service.description.toLowerCase().includes(query) ||
-      service.location.toLowerCase().includes(query)
-    );
-    
-    setFilteredServices(filtered);
-  }, [searchQuery, services]);
-
-  const fetchServices = async () => {
+  const fetchServices = useCallback(async () => {
     try {
       setLoading(true);
       
@@ -142,7 +120,28 @@ const ServicesScreen = () => {
       setLoading(false);
       setRefreshing(false);
     }
-  };
+  }, [selectedCategory]);
+
+  useEffect(() => {
+    fetchServices();
+  }, [fetchServices]);
+
+  // Filter services based on search query
+  useEffect(() => {
+    if (searchQuery.trim() === '') {
+      setFilteredServices(services);
+      return;
+    }
+
+    const query = searchQuery.toLowerCase();
+    const filtered = services.filter(service => 
+      service.title.toLowerCase().includes(query) || 
+      service.description.toLowerCase().includes(query) ||
+      service.location.toLowerCase().includes(query)
+    );
+    
+    setFilteredServices(filtered);
+  }, [searchQuery, services]);
 
   const handleRefresh = () => {
     setRefreshing(true);
@@ -191,6 +190,7 @@ const ServicesScreen = () => {
         )}
         <View style={styles.serviceContent}>
           <Text style={styles.serviceTitle} numberOfLines={1}>{item.title}</Text>
+          <Text style={styles.serviceDescription} numberOfLines={2}>{item.description}</Text>
           <View style={styles.serviceMetadata}>
             <View style={styles.metadataItem}>
               <Ionicons name="folder-outline" size={14} color="#8798AD" />
@@ -201,7 +201,9 @@ const ServicesScreen = () => {
               <Text style={styles.serviceLocation} numberOfLines={1}>{item.location}</Text>
             </View>
           </View>
-          <Text style={styles.servicePrice}>{item.price}</Text>
+          <Text style={styles.servicePrice}>
+            {item.price.startsWith('$') ? item.price : `$${item.price}`}
+          </Text>
         </View>
       </View>
     </TouchableOpacity>
@@ -244,6 +246,7 @@ const ServicesScreen = () => {
           renderItem={renderServiceItem}
           keyExtractor={item => item.id}
           showsVerticalScrollIndicator={false}
+          numColumns={1}
           contentContainerStyle={styles.listContent}
           refreshControl={
             <RefreshControl
@@ -309,6 +312,7 @@ const styles = StyleSheet.create({
   },
   categoriesScrollContent: {
     paddingHorizontal: wp(4),
+    paddingRight: wp(6),
   },
   categoryItem: {
     paddingVertical: hp(1),
@@ -316,13 +320,15 @@ const styles = StyleSheet.create({
     marginRight: wp(2),
     borderRadius: 20,
     backgroundColor: '#F5F8FA',
+    minWidth: wp(15),
   },
   selectedCategoryItem: {
     backgroundColor: '#2B7CE5',
   },
   categoryText: {
-    fontSize: 14,
+    fontSize: Math.min(14, wp(3.5)),
     color: '#8798AD',
+    textAlign: 'center',
   },
   selectedCategoryText: {
     color: '#FFFFFF',
@@ -334,44 +340,50 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   listContent: {
-    paddingHorizontal: wp(4),
-    paddingBottom: hp(10),
+    paddingVertical: hp(2),
   },
   serviceCard: {
     backgroundColor: '#FFFFFF',
     borderRadius: 12,
-    marginBottom: hp(2),
-    overflow: 'hidden',
-    elevation: 2,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 3,
+    shadowOpacity: 0.05,
+    shadowRadius: 10,
+    elevation: 2,
+    marginBottom: hp(2),
+    marginHorizontal: wp(4),
+    overflow: 'hidden',
   },
   serviceCardContent: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    flexDirection: 'column',
   },
   serviceImage: {
-    width: wp(30),
-    height: wp(30),
-    backgroundColor: '#F5F8FA',
+    width: '100%',
+    height: hp(20),
+    borderTopLeftRadius: 12,
+    borderTopRightRadius: 12,
   },
   placeholderImage: {
-    width: wp(30),
-    height: wp(30),
+    width: '100%',
+    height: hp(20),
     backgroundColor: '#F5F8FA',
     justifyContent: 'center',
     alignItems: 'center',
+    borderTopLeftRadius: 12,
+    borderTopRightRadius: 12,
   },
   serviceContent: {
-    flex: 1,
-    padding: 12,
+    padding: wp(3),
   },
   serviceTitle: {
-    fontSize: 16,
+    fontSize: Math.min(18, wp(4.5)),
     fontWeight: '600',
     color: '#1A2D40',
+    marginBottom: 8,
+  },
+  serviceDescription: {
+    fontSize: Math.min(14, wp(3.5)),
+    color: '#5A6E82',
     marginBottom: 8,
   },
   serviceMetadata: {
@@ -383,18 +395,18 @@ const styles = StyleSheet.create({
     marginBottom: 4,
   },
   serviceCategory: {
-    fontSize: 13,
+    fontSize: Math.min(13, wp(3.3)),
     color: '#8798AD',
     marginLeft: 6,
   },
   serviceLocation: {
-    fontSize: 13,
+    fontSize: Math.min(13, wp(3.3)),
     color: '#8798AD',
     marginLeft: 6,
     flex: 1,
   },
   servicePrice: {
-    fontSize: 16,
+    fontSize: Math.min(16, wp(4)),
     fontWeight: '600',
     color: '#2B7CE5',
   },

@@ -13,6 +13,8 @@ import { Session } from '@supabase/supabase-js';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { View, ActivityIndicator, StatusBar, LogBox, Platform } from 'react-native';
 import { AuthProvider } from './src/contexts/AuthContext';
+import { initializeAds } from './src/utils/adUtils';
+import mobileAds from 'react-native-google-mobile-ads';
 
 // Ignore specific warnings
 LogBox.ignoreLogs([
@@ -47,6 +49,19 @@ function App(): JSX.Element {
         setIsLoading(false);
       }
     );
+
+    // Initialize mobile ads
+    const setupAds = async () => {
+      try {
+        console.log('Starting mobile ads initialization...');
+        await mobileAds().initialize();
+        await initializeAds();
+      } catch (error) {
+        console.error('Failed to initialize ads:', error);
+      }
+    };
+    
+    setupAds();
 
     return () => subscription.unsubscribe();
   }, []);

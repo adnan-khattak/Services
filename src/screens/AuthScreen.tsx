@@ -133,6 +133,7 @@ const AuthScreen = () => {
           <TextInput
             style={styles.input}
             placeholder="Username"
+            placeholderTextColor="#8798AD"
             value={username}
             onChangeText={setUsername}
             autoCapitalize="none"
@@ -142,6 +143,7 @@ const AuthScreen = () => {
         <TextInput
           style={styles.input}
           placeholder="Email"
+          placeholderTextColor="#8798AD"
           value={email}
           onChangeText={setEmail}
           keyboardType="email-address"
@@ -152,6 +154,7 @@ const AuthScreen = () => {
           <TextInput
             style={styles.input}
             placeholder="Phone Number"
+            placeholderTextColor="#8798AD"
             value={phone}
             onChangeText={setPhone}
             keyboardType="phone-pad"
@@ -161,6 +164,7 @@ const AuthScreen = () => {
         <TextInput
           style={styles.input}
           placeholder="Password"
+          placeholderTextColor="#8798AD"
           value={password}
           onChangeText={setPassword}
           secureTextEntry
@@ -205,16 +209,16 @@ const styles = StyleSheet.create({
   logoContainer: {
     alignItems: 'center',
     marginBottom: hp('5%'),
-
+    marginTop: hp('2%'),
   },
   appName: {
-    fontSize: hp('3%'),
+    fontSize: Math.min(hp('3%'), 24),
     fontWeight: 'bold',
     color: '#2E384D',
     marginTop: hp('2%'),
   },
   headerText: {
-    fontSize: hp('2.5%'),
+    fontSize: Math.min(hp('2.5%'), 22),
     fontWeight: 'bold',
     color: '#2E384D',
     marginBottom: hp('3%'),
@@ -222,13 +226,16 @@ const styles = StyleSheet.create({
   },
   formContainer: {
     marginBottom: hp('3%'),
+    width: '100%',
+    maxWidth: 450,
+    alignSelf: 'center',
   },
   input: {
     backgroundColor: '#FFFFFF',
     borderRadius: 10,
     padding: hp('1.8%'),
     marginBottom: hp('2%'),
-    fontSize: hp('1.8%'),
+    fontSize: Math.min(hp('1.8%'), 16),
     borderWidth: 1,
     borderColor: '#E4E8F0',
   },
@@ -238,18 +245,21 @@ const styles = StyleSheet.create({
     padding: hp('1.8%'),
     alignItems: 'center',
     marginTop: hp('1%'),
+    height: hp('6%'),
+    justifyContent: 'center',
   },
   authButtonText: {
     color: '#FFFFFF',
-    fontSize: hp('2%'),
+    fontSize: Math.min(hp('2%'), 18),
     fontWeight: 'bold',
   },
   toggleContainer: {
     alignItems: 'center',
+    marginBottom: hp('3%'),
   },
   toggleText: {
     color: '#4E8AF4',
-    fontSize: hp('1.7%'),
+    fontSize: Math.min(hp('1.7%'), 15),
   },
 });
 

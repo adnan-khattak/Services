@@ -11,6 +11,8 @@ import {
   SafeAreaView,
   Platform,
   KeyboardAvoidingView,
+  Modal,
+  FlatList,
 } from 'react-native';
 import { heightPercentageToDP as hp, widthPercentageToDP as wp } from 'react-native-responsive-screen';
 import { useNavigation } from '@react-navigation/native';
@@ -18,7 +20,6 @@ import { SessionContext } from '../../App';
 import { supabase } from '../utils/supabaseClient';
 import { uploadMultipleFiles } from '../utils/cloudinaryClient';
 import Ionicons from 'react-native-vector-icons/Ionicons';
-import { Picker } from '@react-native-picker/picker';
 import { Asset } from 'react-native-image-picker';
 import MediaPicker from '../components/MediaPicker';
 import { showInterstitialAd } from '../utils/adUtils';
@@ -43,6 +44,7 @@ const AddServiceScreen = () => {
   const [mediaFiles, setMediaFiles] = useState<Asset[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(0);
+  const [showCategoryModal, setShowCategoryModal] = useState(false);
 
   // Check if user is logged in
   useEffect(() => {
@@ -114,7 +116,9 @@ const AddServiceScreen = () => {
       
       // Show interstitial ad after successful service creation
       try {
-        await showInterstitialAd();
+        console.log('Attempting to show interstitial ad after service creation');
+        const adDisplayed = await showInterstitialAd();
+        console.log('Interstitial ad display result:', adDisplayed ? 'Displayed successfully' : 'Failed to display');
       } catch (adError) {
         console.log('Ad display error:', adError);
         // Continue even if ad fails to display
@@ -166,24 +170,75 @@ const AddServiceScreen = () => {
             <TextInput
               style={styles.input}
               value={price}
-              onChangeText={setPrice}
+              onChangeText={(text) => {
+                // Add $ prefix if user hasn't added it
+                if (text && !text.startsWith('$') && text !== '') {
+                  setPrice(`$${text}`);
+                } else {
+                  setPrice(text);
+                }
+              }}
               placeholder="E.g., $50/hr or $200 flat rate"
               placeholderTextColor="#8798AD"
               keyboardType="default"
             />
             
             <Text style={styles.label}>Category</Text>
-            <View style={styles.pickerContainer}>
-              <Picker
-                selectedValue={category}
-                onValueChange={(itemValue) => setCategory(itemValue)}
-                style={styles.picker}
-              >
-                {SERVICE_CATEGORIES.map((cat) => (
-                  <Picker.Item key={cat} label={cat} value={cat} />
-                ))}
-              </Picker>
-            </View>
+            <TouchableOpacity 
+              style={styles.categorySelector}
+              onPress={() => setShowCategoryModal(true)}
+            >
+              <Text style={styles.categoryText}>{category}</Text>
+              <Ionicons name="chevron-down" size={16} color="#8798AD" />
+            </TouchableOpacity>
+            
+            {/* Category Selection Modal */}
+            <Modal
+              visible={showCategoryModal}
+              transparent={true}
+              animationType="slide"
+              onRequestClose={() => setShowCategoryModal(false)}
+            >
+              <View style={styles.modalOverlay}>
+                <View style={styles.modalContent}>
+                  <Text style={styles.modalTitle}>Select Category</Text>
+                  
+                  <FlatList
+                    data={SERVICE_CATEGORIES}
+                    keyExtractor={(item) => item}
+                    renderItem={({ item }) => (
+                      <TouchableOpacity
+                        style={styles.categoryItem}
+                        onPress={() => {
+                          setCategory(item);
+                          setShowCategoryModal(false);
+                        }}
+                      >
+                        <Text 
+                          style={[
+                            styles.categoryItemText,
+                            category === item && styles.selectedCategoryText
+                          ]}
+                        >
+                          {item}
+                        </Text>
+                        {category === item && (
+                          <Ionicons name="checkmark" size={18} color="#2B7CE5" />
+                        )}
+                      </TouchableOpacity>
+                    )}
+                    ItemSeparatorComponent={() => <View style={styles.separator} />}
+                  />
+                  
+                  <TouchableOpacity
+                    style={styles.closeButton}
+                    onPress={() => setShowCategoryModal(false)}
+                  >
+                    <Text style={styles.closeButtonText}>Close</Text>
+                  </TouchableOpacity>
+                </View>
+              </View>
+            </Modal>
             
             <Text style={styles.label}>Location</Text>
             <TextInput
@@ -236,7 +291,7 @@ const styles = StyleSheet.create({
     padding: wp(5),
   },
   label: {
-    fontSize: 16,
+    fontSize: Math.min(16, wp(4)),
     fontWeight: '600',
     color: '#1A2D40',
     marginBottom: hp(1),
@@ -247,9 +302,10 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     paddingHorizontal: wp(4),
     paddingVertical: hp(1.5),
-    fontSize: 14,
+    fontSize: Math.min(14, wp(3.5)),
     color: '#1A2D40',
     width: '100%',
+    maxHeight: hp(15),
   },
   textArea: {
     height: hp(15),
@@ -270,10 +326,11 @@ const styles = StyleSheet.create({
     marginTop: hp(3),
     alignItems: 'center',
     justifyContent: 'center',
+    maxHeight: hp(7),
   },
   submitButtonText: {
     color: '#FFFFFF',
-    fontSize: 16,
+    fontSize: Math.min(16, wp(4)),
     fontWeight: '600',
   },
   loadingContainer: {
@@ -285,7 +342,72 @@ const styles = StyleSheet.create({
   loadingText: {
     marginLeft: wp(2),
     color: '#8798AD',
-    fontSize: 14,
+    fontSize: Math.min(14, wp(3.5)),
+  },
+  categorySelector: {
+    backgroundColor: '#F5F8FA',
+    borderRadius: 8,
+    paddingHorizontal: wp(4),
+    paddingVertical: hp(1.5),
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: hp(1),
+  },
+  categoryText: {
+    fontSize: Math.min(14, wp(3.5)),
+    color: '#1A2D40',
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  modalContent: {
+    width: wp(80),
+    backgroundColor: 'white',
+    borderRadius: 12,
+    padding: wp(5),
+    maxHeight: hp(70),
+    maxWidth: 400,
+  },
+  modalTitle: {
+    fontSize: Math.min(18, wp(4.5)),
+    fontWeight: '600',
+    color: '#1A2D40',
+    marginBottom: hp(2),
+    textAlign: 'center',
+  },
+  categoryItem: {
+    paddingVertical: hp(1.5),
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  categoryItemText: {
+    fontSize: Math.min(16, wp(4)),
+    color: '#1A2D40',
+  },
+  selectedCategoryText: {
+    color: '#2B7CE5',
+    fontWeight: '600',
+  },
+  separator: {
+    height: 1,
+    backgroundColor: '#F0F2F5',
+  },
+  closeButton: {
+    backgroundColor: '#F0F2F5',
+    borderRadius: 8,
+    paddingVertical: hp(1.2),
+    marginTop: hp(2),
+    alignItems: 'center',
+  },
+  closeButtonText: {
+    color: '#1A2D40',
+    fontSize: Math.min(14, wp(3.5)),
+    fontWeight: '600',
   },
 });
 
